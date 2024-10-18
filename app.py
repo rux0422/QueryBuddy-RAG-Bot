@@ -9,7 +9,7 @@ from config import PINECONE_API_KEY, COHERE_API_KEY
 
 # Page configuration
 st.set_page_config(
-    page_title="Interactive Document QA",
+    page_title="QueryBuddy",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -263,7 +263,7 @@ def process_question(query):
         st.session_state.processing_question = False
 
 # Main app layout
-st.title("📚 Interactive Document QA")
+st.title("📚 QueryBuddy")
 
 # Sidebar with history
 with st.sidebar:
