@@ -40,8 +40,10 @@ if 'success_message' not in st.session_state:
     st.session_state.success_message = ""
 if 'question_text' not in st.session_state:
     st.session_state.question_text = ""
+if 'vector_ids' not in st.session_state:
+    st.session_state.vector_ids = []
 
-# Updated CSS with specific Next Question button styling
+# CSS styles remain the same
 st.markdown("""
     <style>
     .stButton > button {
@@ -79,12 +81,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Function to initialize Pinecone and models
+# Modified initialize_components function
 @st.cache_resource
 def initialize_components():
     try:
         pc = Pinecone(api_key=PINECONE_API_KEY)
         index = pc.Index("qa-bot-index")
+        # Verify index exists and is ready
+        index_stats = index.describe_index_stats()
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         model = AutoModel.from_pretrained("distilbert-base-uncased")
         co = cohere.Client(COHERE_API_KEY)
@@ -96,6 +100,61 @@ def initialize_components():
 # Initialize components
 pc, index, tokenizer, model, co = initialize_components()
 
+# Modified clear_index function
+def clear_index():
+    try:
+        if st.session_state.vector_ids:
+            # Delete vectors in batches of 100
+            batch_size = 100
+            for i in range(0, len(st.session_state.vector_ids), batch_size):
+                batch = st.session_state.vector_ids[i:i + batch_size]
+                index.delete(ids=batch)
+            st.session_state.vector_ids = []
+        return True
+    except Exception as e:
+        st.warning(f"Note: Index clearing encountered an issue: {str(e)}")
+        return False
+
+# Modified process_pdf function
+def process_pdf(file):
+    try:
+        # Clear existing vectors
+        clear_index()
+        
+        text = extract_text_from_pdf(file)
+        if not text:
+            return 0
+            
+        chunks = split_text(text)
+        vector_ids = []  # To store the IDs of uploaded vectors
+        
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            batch_chunks = chunks[i:i + batch_size]
+            vectors = []
+            for j, chunk in enumerate(batch_chunks):
+                embedding = embed_text(chunk)
+                if embedding is None:
+                    continue
+                doc_id = f"doc_{i+j}"
+                vector_ids.append(doc_id)
+                vectors.append((doc_id, embedding, {"text": chunk}))
+            
+            if vectors:
+                try:
+                    index.upsert(vectors=vectors)
+                except Exception as e:
+                    st.error(f"Error uploading batch {i//batch_size + 1}: {str(e)}")
+                    continue
+        
+        # Store vector IDs in session state
+        st.session_state.vector_ids = vector_ids
+        return len(chunks)
+    except Exception as e:
+        st.error(f"Error processing PDF: {str(e)}")
+        return 0
+
+# The rest of the functions remain the same
 def embed_text(text):
     try:
         inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
@@ -120,15 +179,8 @@ def extract_text_from_pdf(file):
 def split_text(text, chunk_size=1000):
     return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
-def clear_index():
-    try:
-        index.delete(delete_all=True)
-        return True
-    except Exception as e:
-        st.warning(f"Note: Index clearing encountered an issue: {str(e)}")
-        return False
-
 def reset_session_state():
+    clear_index()
     st.session_state.pdf_processed = False
     st.session_state.num_chunks = 0
     st.session_state.current_pdf_name = None
@@ -141,6 +193,7 @@ def reset_session_state():
     st.session_state.show_success_message = False
     st.session_state.success_message = ""
     st.session_state.question_text = ""
+    st.session_state.vector_ids = []
 
 def process_pdf_callback():
     if st.session_state.uploaded_file is not None:
