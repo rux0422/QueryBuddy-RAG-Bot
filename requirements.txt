@@ -1,0 +1,6 @@
+streamlit
+pinecone-client
+transformers
+torch
+cohere
+PyPDF2

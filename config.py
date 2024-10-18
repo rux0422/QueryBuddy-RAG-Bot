@@ -1,0 +1,3 @@
+# config.py
+PINECONE_API_KEY = "f4c8e22b-b1a2-4ecd-a1e5-f8afbf271048"
+COHERE_API_KEY = "9LA9uG3Mr6swUpOkd8PKBfyJ6EWyVTSvtZKufJ2S"
