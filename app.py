@@ -369,3 +369,4 @@ if st.session_state.pdf_processed:
                     st.write("No source segments available.")
 else:
     st.info("👆 Please upload and process a PDF to start asking questions.")
+        
