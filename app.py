@@ -42,8 +42,10 @@ if 'question_text' not in st.session_state:
     st.session_state.question_text = ""
 if 'vector_ids' not in st.session_state:
     st.session_state.vector_ids = []
+if 'current_pdf_vectors' not in st.session_state:
+    st.session_state.current_pdf_vectors = set()
 
-# CSS styles remain the same
+# CSS styles
 st.markdown("""
     <style>
     .stButton > button {
@@ -81,13 +83,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Modified initialize_components function
 @st.cache_resource
 def initialize_components():
     try:
         pc = Pinecone(api_key=PINECONE_API_KEY)
         index = pc.Index("qa-bot-index")
-        # Verify index exists and is ready
         index_stats = index.describe_index_stats()
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         model = AutoModel.from_pretrained("distilbert-base-uncased")
@@ -97,64 +97,46 @@ def initialize_components():
         st.error(f"Error initializing components: {str(e)}")
         return None, None, None, None, None
 
-# Initialize components
 pc, index, tokenizer, model, co = initialize_components()
 
-# Modified clear_index function
 def clear_index():
     try:
-        if st.session_state.vector_ids:
+        if st.session_state.current_pdf_vectors:
             # Delete vectors in batches of 100
             batch_size = 100
-            for i in range(0, len(st.session_state.vector_ids), batch_size):
-                batch = st.session_state.vector_ids[i:i + batch_size]
+            vector_list = list(st.session_state.current_pdf_vectors)
+            for i in range(0, len(vector_list), batch_size):
+                batch = vector_list[i:i + batch_size]
                 index.delete(ids=batch)
-            st.session_state.vector_ids = []
+            st.session_state.current_pdf_vectors.clear()
         return True
     except Exception as e:
         st.warning(f"Note: Index clearing encountered an issue: {str(e)}")
         return False
 
-# Modified process_pdf function
-def process_pdf(file):
-    try:
-        # Clear existing vectors
-        clear_index()
-        
-        text = extract_text_from_pdf(file)
-        if not text:
-            return 0
-            
-        chunks = split_text(text)
-        vector_ids = []  # To store the IDs of uploaded vectors
-        
-        batch_size = 100
-        for i in range(0, len(chunks), batch_size):
-            batch_chunks = chunks[i:i + batch_size]
-            vectors = []
-            for j, chunk in enumerate(batch_chunks):
-                embedding = embed_text(chunk)
-                if embedding is None:
-                    continue
-                doc_id = f"doc_{i+j}"
-                vector_ids.append(doc_id)
-                vectors.append((doc_id, embedding, {"text": chunk}))
-            
-            if vectors:
-                try:
-                    index.upsert(vectors=vectors)
-                except Exception as e:
-                    st.error(f"Error uploading batch {i//batch_size + 1}: {str(e)}")
-                    continue
-        
-        # Store vector IDs in session state
-        st.session_state.vector_ids = vector_ids
-        return len(chunks)
-    except Exception as e:
-        st.error(f"Error processing PDF: {str(e)}")
-        return 0
+def reset_session_state():
+    # Clear the vector store first
+    clear_index()
+    
+    # Reset all session state variables
+    st.session_state.pdf_processed = False
+    st.session_state.num_chunks = 0
+    st.session_state.qa_history = []
+    st.session_state.current_pdf_name = None
+    st.session_state.file_uploader_key += 1
+    st.session_state.current_question = ""
+    st.session_state.current_answer = ""
+    st.session_state.results = None
+    st.session_state.processing_question = False
+    st.session_state.show_success_message = False
+    st.session_state.success_message = ""
+    st.session_state.question_text = ""
+    st.session_state.vector_ids = []
+    st.session_state.current_pdf_vectors = set()
+    
+    # Force a rerun to clear the UI
+    st.rerun()
 
-# The rest of the functions remain the same
 def embed_text(text):
     try:
         inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
@@ -179,21 +161,43 @@ def extract_text_from_pdf(file):
 def split_text(text, chunk_size=1000):
     return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
-def reset_session_state():
-    clear_index()
-    st.session_state.pdf_processed = False
-    st.session_state.num_chunks = 0
-    st.session_state.current_pdf_name = None
-    st.session_state.qa_history = []
-    st.session_state.file_uploader_key += 1
-    st.session_state.current_question = ""
-    st.session_state.current_answer = ""
-    st.session_state.results = None
-    st.session_state.processing_question = False
-    st.session_state.show_success_message = False
-    st.session_state.success_message = ""
-    st.session_state.question_text = ""
-    st.session_state.vector_ids = []
+def process_pdf(file):
+    try:
+        # Clear existing vectors for the current PDF
+        clear_index()
+        
+        text = extract_text_from_pdf(file)
+        if not text:
+            return 0
+            
+        chunks = split_text(text)
+        current_pdf_vectors = set()
+        
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            batch_chunks = chunks[i:i + batch_size]
+            vectors = []
+            for j, chunk in enumerate(batch_chunks):
+                embedding = embed_text(chunk)
+                if embedding is None:
+                    continue
+                doc_id = f"doc_{st.session_state.current_pdf_name}_{i+j}"
+                current_pdf_vectors.add(doc_id)
+                vectors.append((doc_id, embedding, {"text": chunk}))
+            
+            if vectors:
+                try:
+                    index.upsert(vectors=vectors)
+                except Exception as e:
+                    st.error(f"Error uploading batch {i//batch_size + 1}: {str(e)}")
+                    continue
+        
+        # Update session state with current PDF vectors
+        st.session_state.current_pdf_vectors = current_pdf_vectors
+        return len(chunks)
+    except Exception as e:
+        st.error(f"Error processing PDF: {str(e)}")
+        return 0
 
 def process_pdf_callback():
     if st.session_state.uploaded_file is not None:
@@ -206,39 +210,6 @@ def process_pdf_callback():
                 st.session_state.success_message = f"✅ Successfully processed {num_chunks} chunks from {st.session_state.uploaded_file.name}"
             else:
                 st.error("Failed to process PDF file.")
-
-def process_pdf(file):
-    try:
-        clear_index()
-        
-        text = extract_text_from_pdf(file)
-        if not text:
-            return 0
-            
-        chunks = split_text(text)
-        
-        batch_size = 100
-        for i in range(0, len(chunks), batch_size):
-            batch_chunks = chunks[i:i + batch_size]
-            vectors = []
-            for j, chunk in enumerate(batch_chunks):
-                embedding = embed_text(chunk)
-                if embedding is None:
-                    continue
-                doc_id = f"doc_{i+j}"
-                vectors.append((doc_id, embedding, {"text": chunk}))
-            
-            if vectors:
-                try:
-                    index.upsert(vectors=vectors)
-                except Exception as e:
-                    st.error(f"Error uploading batch {i//batch_size + 1}: {str(e)}")
-                    continue
-        
-        return len(chunks)
-    except Exception as e:
-        st.error(f"Error processing PDF: {str(e)}")
-        return 0
 
 def generate_answer(query, context):
     try:
@@ -300,15 +271,21 @@ def process_question(query):
             include_metadata=True
         )
         
-        if results['matches']:
-            context = " ".join([match['metadata']['text'] for match in results['matches']])
+        # Filter results to only include vectors from the current PDF
+        filtered_matches = [
+            match for match in results['matches']
+            if any(vec_id in match['id'] for vec_id in st.session_state.current_pdf_vectors)
+        ]
+        
+        if filtered_matches:
+            context = " ".join([match['metadata']['text'] for match in filtered_matches])
             answer = generate_answer(query, context)
             
             st.session_state.current_answer = answer
-            st.session_state.results = results
+            st.session_state.results = {'matches': filtered_matches}
         else:
-            st.session_state.current_answer = "Could not find anything relevant. Please try rephrasing your question."
-            st.session_state.results = results
+            st.session_state.current_answer = "Could not find anything relevant in the current PDF. Please try rephrasing your question."
+            st.session_state.results = {'matches': []}
         
         st.session_state.processing_question = False
     except Exception as e:
@@ -326,7 +303,6 @@ with st.sidebar:
         st.metric("Current Document", st.session_state.current_pdf_name)
     
     if st.button("🗑️ Clear All & Reset", use_container_width=False):
-        clear_index()
         reset_session_state()
     
     if st.session_state.qa_history:
@@ -347,6 +323,7 @@ if uploaded_file is not None:
         st.session_state.qa_history = []
         st.session_state.num_chunks = 0
         st.session_state.show_success_message = False
+        st.session_state.current_pdf_vectors = set()
     
     if not st.session_state.pdf_processed:
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -380,10 +357,11 @@ if st.session_state.pdf_processed:
         st.markdown("### 💡 Latest Answer:")
         st.markdown(f'<div class="answer">{st.session_state.current_answer}</div>', unsafe_allow_html=True)
         
-        if st.session_state.current_answer != "Could not find anything for now. Try framing your question differently.":
+        if st.session_state.current_answer != "Could not find anything relevant in the current PDF. Please try rephrasing your question.":
             with st.expander("📑 View Source Segments"):
                 if st.session_state.results and 'matches' in st.session_state.results:
                     for i, match in enumerate(st.session_state.results['matches']):
+                        
                         st.markdown(f"Segment {i+1}")
                         st.markdown(match['metadata']['text'])
                         st.markdown("---")
@@ -391,4 +369,3 @@ if st.session_state.pdf_processed:
                     st.write("No source segments available.")
 else:
     st.info("👆 Please upload and process a PDF to start asking questions.")
-
