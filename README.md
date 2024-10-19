@@ -16,7 +16,7 @@ To set up QueryBuddy on your local machine, follow these steps:
 1. Clone the Repository:
    ```
    git clone https://github.com/rux0422/QueryBuddy-RAG-Bot.git
-   cd QueryBuddy-RAG-Bo
+   cd QueryBuddy-RAG-Bot
    ```
 
 2. Set Up a Virtual Environment (optional but recommended):
