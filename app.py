@@ -211,23 +211,24 @@ def process_pdf_callback():
             else:
                 st.error("Failed to process PDF file.")
 
+# ---------------------------------------------------------------
+# FIXED: Migrated from deprecated co.generate() to co.chat()
+# Cohere removed the Generate API on September 15, 2025.
+# ---------------------------------------------------------------
 def generate_answer(query, context):
     try:
         max_context_length = 12000
         if len(context) > max_context_length:
             context = context[:max_context_length]
         
-        prompt = f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"
-        
         try:
-            response = co.generate(
-                model="command",
-                prompt=prompt,
-                max_tokens=500,
-                temperature=0.7,
-                stop_sequences=["Human:", "Context:"]
+            response = co.chat(
+                model="command-r-plus",
+                message=query,
+                preamble=f"You are a helpful assistant. Answer the user's question based only on the following context from the uploaded document. If the answer cannot be found in the context, say so clearly.\n\nContext:\n{context}",
+                temperature=0.7
             )
-            return response.generations[0].text.strip()
+            return response.text.strip()
         except Exception as e:
             return f"Error generating response: {str(e)}"
     except Exception as e:
@@ -361,7 +362,6 @@ if st.session_state.pdf_processed:
             with st.expander("📑 View Source Segments"):
                 if st.session_state.results and 'matches' in st.session_state.results:
                     for i, match in enumerate(st.session_state.results['matches']):
-                        
                         st.markdown(f"Segment {i+1}")
                         st.markdown(match['metadata']['text'])
                         st.markdown("---")
@@ -369,4 +369,3 @@ if st.session_state.pdf_processed:
                     st.write("No source segments available.")
 else:
     st.info("👆 Please upload and process a PDF to start asking questions.")
-        
