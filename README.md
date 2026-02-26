@@ -30,7 +30,7 @@ To set up QueryBuddy on your local machine, follow these steps:
    pip install -r requirements.txt
    ```
 
-4. Set Up API Keys:
+4. Create and Set Up API Keys:
    Create a `config.py` file in the project root directory with the following content:
    ```python
    PINECONE_API_KEY = "your_pinecone_api_key"
@@ -39,7 +39,7 @@ To set up QueryBuddy on your local machine, follow these steps:
    Replace the placeholder values with your actual API keys.
 
 5. Initialize Pinecone Index:
-   Ensure you have created an index named "qa-bot-index" in your Pinecone account.
+   Ensure you have created an index named "qa-bot-index" in your Pinecone account and set the parameters as Dimension as 1024 and Metric as cosine.
 
 6. Run the Application:
    ```
