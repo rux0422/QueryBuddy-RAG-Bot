@@ -30,7 +30,7 @@ To set up QueryBuddy on your local machine, follow these steps:
    pip install -r requirements.txt
    ```
 
-4. Create and Set Up API Keys:
+4. Create and Set Up API Keys (go to the Pinecone and Cohere websites):
    Create a `config.py` file in the project root directory with the following content:
    ```python
    PINECONE_API_KEY = "your_pinecone_api_key"
