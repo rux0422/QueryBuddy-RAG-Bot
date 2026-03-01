@@ -1,4 +1,4 @@
 # config.py
-PINECONE_API_KEY = "your pinecone api key"
-COHERE_API_KEY = "your cohere api key"
+PINECONE_API_KEY = "pcsk_3AHpMP_F2yTqnkRW25KzkP6XJb3rEPVcyQXApcnp4YCAPSM4DLHFor8J4HtQLa8SabBFzS"
+COHERE_API_KEY = "9LA9uG3Mr6swUpOkd8PKBfyJ6EWyVTSvtZKufJ2S"
 
